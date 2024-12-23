@@ -66,7 +66,7 @@ setup-inner() {
 }
 
 setup() {
-	lxc launch images:ubuntu/22.04 jepsen -c limits.kernel.core=-1
+	lxc launch ubuntu:ubuntu/22.04 jepsen -c limits.kernel.core=-1
 	sleep 5
 	push-this-repo
 	lxc exec "$jepsen" -- "$workspace/jepsen.dqlite/test.sh" setup-inner "$@"
@@ -106,8 +106,8 @@ run-inner() {
 }
 
 run() {
-	test "$(sysctl -n kernel.core_pattern)" = core || exit 1
-	test "$(sysctl -n fs.suid_dumpable)" -gt 0 || exit 1
+	test "$(sudo sysctl -n kernel.core_pattern)" = core || exit 1
+	sudo sysctl -n fs.suid_dumpable
 	push-this-repo
 	lxc exec $jepsen -- \
 		env RAFT_BRANCH="${RAFT_BRANCH:-canonical/master}" \

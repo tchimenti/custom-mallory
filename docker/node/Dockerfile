@@ -47,9 +47,9 @@ RUN echo "deb http://apt.llvm.org/buster/ llvm-toolchain-buster-12 main" >> /etc
 RUN echo "deb-src http://apt.llvm.org/buster/ llvm-toolchain-buster-12 main" >> /etc/apt/sources.list
 RUN wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
 RUN apt-get update -qy
-RUN apt-get install -qy clang-12 lld-12
-RUN ln -s /usr/bin/clang-12 /usr/bin/clang && ln -s /usr/bin/clang++-12 /usr/bin/clang++ && \
-    ln -s /usr/bin/llvm-config-12 /usr/bin/llvm-config
+RUN apt install -qy clang-11 lld-11
+RUN ln -s /usr/bin/clang-11 /usr/bin/clang && ln -s /usr/bin/clang++-11 /usr/bin/clang++ && \
+    ln -s /usr/bin/llvm-config-11 /usr/bin/llvm-config
 # end build tools
 
 # Install coverage dependencies
