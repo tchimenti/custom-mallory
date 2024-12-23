@@ -336,8 +336,8 @@ impl FeedbackManager {
         let mut pkt_rdr = Cursor::new(pkt_cached_data);
         // pkt_rdr.seek(SeekFrom::Start(starting_offset)).unwrap();
 
-        log::debug!(
-            "[FEEDBACK] Received batch {} consisting of {} execution events and {} packet events from {}",
+        log::info!(
+            "[FEEDBACKK] Received batch {} consisting of {} execution events and {} packet events from {}",
             batch_id,
             db_evt_counter,
             pkt_evt_counter,
@@ -358,8 +358,8 @@ impl FeedbackManager {
                 // BlockExecute
                 BLOCK_EVENT_TYPE => {
                     let eid = db_rdr.read_u64::<BOrd>().unwrap();
-                    log::debug!(
-                        "[Node {} Batch {} Entry {} / {}] BlockExecute {} @ {}",
+                    log::info!(
+                        "[BLOCK_EVENT_TYPE][Node {} Batch {} Entry {} / {}] BlockExecute {} @ {}",
                         node_id,
                         batch_id,
                         db_entry_index,
@@ -375,17 +375,20 @@ impl FeedbackManager {
                 // FunctionExecute
                 FUNC_EVENT_TYPE => {
                     let function_id = db_rdr.read_u64::<BOrd>().unwrap();
-                    log::debug!(
-                        "[Node {} Batch {} Entry {} / {}] FunctionExecute {} @ {}",
+                    let temporal = db_rdr.read_u64::<BOrd>().unwrap();
+                    log::info!(
+                        "[FUNC_EVENT_TYPE][Node {} Batch {} Entry {} / {}] FunctionExecute {} @ {} @ Temporal {}",
                         node_id,
                         batch_id,
                         db_entry_index,
                         db_evt_counter,
                         function_id,
-                        ts
+                        ts,
+                        temporal
                     );
                     Event::FunctionExecute {
                         function_id: function_id as u16,
+                        temporal: temporal as u64,
                     }
                 }
 

@@ -75,6 +75,7 @@ pub enum Event {
     },
     FunctionExecute {
         function_id: FunctionId,
+        temporal: u64,
     },
     AFLHitCount {
         branch_events: Vec<BranchHitCount>,
@@ -164,7 +165,7 @@ impl fmt::Display for Event {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Event::BlockExecute { block_id } => write!(f, "BB({})", block_id),
-            Event::FunctionExecute { function_id } => write!(f, "Func({})", function_id),
+            Event::FunctionExecute { function_id, temporal } => write!(f, "Func({}) temporal({})", function_id, temporal),
             Event::AFLHitCount { branch_events: _ } => {
                 write!(f, "AFLBranchEvent(<not printed>)")
             }
