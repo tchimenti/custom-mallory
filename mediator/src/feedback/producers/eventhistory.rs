@@ -33,7 +33,7 @@ use super::{LayeredChangeAwareSet, SummaryProducer, SummaryProducerIdentifier, V
 #[derive(Clone, Copy, PartialEq, Eq, Debug, PartialOrd, Ord, Hash)]
 pub enum EventKind {
     BlockExecute { block_id: BlockId },
-    FunctionExecute { function_id: FunctionId },
+    FunctionExecute { function_id: FunctionId, temporal: u64 },
     PacketSend { data: u32, from: NodeId, to: NodeId },
     PacketReceive { data: u32, from: NodeId, to: NodeId },
     ResetSummary,
@@ -43,7 +43,7 @@ impl fmt::Display for EventKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::BlockExecute { block_id } => write!(f, "BB({})", block_id),
-            Self::FunctionExecute { function_id } => write!(f, "F({})", function_id),
+            Self::FunctionExecute { function_id, temporal } => write!(f, "F({}) temporal({})", function_id, temporal),
             Self::PacketSend { data, from, to } => {
                 write!(f, "Send({} from {} to {})", data, from, to)
             }
@@ -72,8 +72,9 @@ impl EventKind {
             Event::BlockExecute { block_id, .. } => Some(EventKind::BlockExecute {
                 block_id: *block_id,
             }),
-            Event::FunctionExecute { function_id, .. } => Some(EventKind::FunctionExecute {
+            Event::FunctionExecute { function_id, temporal, .. } => Some(EventKind::FunctionExecute {
                 function_id: *function_id,
+                temporal: *temporal,
             }),
             Event::PacketSend { data, to, .. } => Some(EventKind::PacketSend {
                 data: *data,
@@ -574,6 +575,7 @@ impl SummaryProducer for EventHistory {
     }
 
     fn update(&mut self, new_event: &LamportEvent, state_similarity_threshold: f64) {
+        log::info!("[EVENT] {}", new_event);
         if let Some(ev_kind) = EventKind::from_event(new_event) {
             // Update the vector clock.
             self.vc.update(new_event, state_similarity_threshold);

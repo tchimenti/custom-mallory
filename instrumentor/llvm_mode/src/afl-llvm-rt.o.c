@@ -38,6 +38,7 @@ struct Event
       u64 fevtType; // 2: function
       s64 ftimestamp;
       u64 fevtID;
+      u64 temporal;
     };
     struct
     {
@@ -93,6 +94,7 @@ void track_functions(u16 evtID)
   evtVec_ptr[loc].fevtType = FUNC_EVENT_TYPE;
   evtVec_ptr[loc].fevtID = evtID;
   evtVec_ptr[loc].ftimestamp = time;
+  evtVec_ptr[loc].temporal = 42;
 }
 
 void init_shm_dsfuzz()
