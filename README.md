@@ -1,202 +1,88 @@
-# Jepsen & Mallory
+# Setup Guide
 
-Breaking distributed systems so you don't have to.
+## Prerequisites
 
-**Jepsen** is a Clojure library. A test is a Clojure program which uses the Jepsen
-library to set up a distributed system, run a bunch of operations against that
-system, and verify that the history of those operations makes sense. Jepsen has
-been used to verify everything from eventually-consistent commutative databases
-to linearizable coordination systems to distributed task schedulers. It can
-also generate graphs of performance and availability, helping you characterize
-how a system responds to different faults. See
-[jepsen.io](https://jepsen.io/analyses) for examples of the sorts of analyses
-you can carry out with Jepsen.
+Before proceeding, make sure you have the following tools installed:
 
-**Mallory** is a graybox extension to Jepsen, implemented in Rust. It hooks into
-an existing Jepsen test and takes the role of the nemesis, deciding in real-time
-which actions to inject and when, based on the _runtime_ behaviour of the system
-under test.
+- **Vagrant**: Download the appropriate version for your platform from the [official page](https://developer.hashicorp.com/vagrant/downloads).
+- **VirtualBox**: This is the default option for VM management. It's not mandatory, but you can configure a different VM in the Vagrant options if you prefer.
 
-## Citing Mallory
-Mallory has been accepted for publication at the 2023 ACM SIGSAC Conference on Computer and Communications Security (CCS 2023). 
-The paper is also available on [arXiv](https://arxiv.org/pdf/2305.02601.pdf). If you use this code in your scientific work, please cite the paper as follows:
+## VM Setup
+
+In the root of the project, execute the following commands:
+
 ```
-@inproceedings{mallory,
-author={Meng, Ruijie and P{\^\i}rlea, George and Roychoudhury, Abhik and Sergey, Ilya},
-title={Greybox Fuzzing of Distributed Systems},
-booktitle={Proceedings of the 2023 ACM SIGSAC Conference on Computer and Communications Security},
-pages={1615--1629},
-year={2023}}
-```
-
-## Design Overview
-
-### Jepsen
-
-A Jepsen test runs as a Clojure program on a *control node*. That program uses
-SSH to log into a bunch of *db nodes*, where it sets up the distributed system
-you're going to test using the test's pluggable *os* and *db*.
-
-Once the system is running, the control node spins up a set of logically
-single-threaded *processes*, each with its own *client* for the distributed
-system. A *generator* generates new operations for each process to perform.
-Processes then apply those operations to the system using their clients. The
-start and end of each operation is recorded in a *history*. While performing
-operations, a special *nemesis* process introduces faults into the system--_also
-scheduled by the generator._
-
-Finally, the DB and OS are torn down. Jepsen uses a *checker* to analyze the
-test's history for correctness, and to generate reports, graphs, etc. The test,
-history, analysis, and any supplementary results are written to the filesystem
-under `store/<test-name>/<date>/` for later review. Symlinks to the latest
-results are maintained at each level for convenience.
-
-### Mallory
-
-Mallory hooks into your Jepsen test and takes the place of the nemesis
-generator. We use a custom version of Jepsen, modified to inform Mallory when
-tests start and end and when client and nemesis operations are executed. Most
-importantly, Mallory uses the nemeses defined in the Jepsen test---this requires
-some modification of these nemeses, as explained in the tutorial below.
-
-As the test executes, Mallory observes the system under test and introduces
-faults with the goal of inducing behaviour not seen before.
-
-## Documentation
-
-This [tutorial](doc/tutorial/index.md) walks you through writing a Jepsen test
-from scratch. For reference, see the [API documentation](http://jepsen-io.github.io/jepsen/).
-
-## Setting up a Jepsen + Mallory environment
-
-We provide a ready-made environment using Vagrant:
-
-```bash
-cd docker/
-vagrant plugin install vagrant-reload   # only needed once
+cd docker
 vagrant up
 ```
 
-### Modifying an existing Jepsen test for Mallory
+The first time you run this, it may take several minutes to complete.
 
-If you have an existing Jepsen test harness, Mallory takes the place of your
-existing nemesis package and generator.
+## Accessing the VM
 
-```Clojure
-(:require [jepsen.mediator.wrapper :as med])
+To enter the VM, run:
 
-;; this should be a list of packages, as returned by
-;; jepsen/nemesis/combined.clj:nemesis-packages
-;; and NOT a combined package (as returned by compose-package)
-;; If you have custom nemeses, you need to write a version of this yourself
-;; that includes your custom nemesis.
-packages      (nemesis/nemesis-packages nemesis-opts)
-
-;; Previously, the nemesis package was obtained as such:
-;; nemesis       (nemesis/nemesis-package nemesis-opts)
-nemesis      (med/adaptive-nemesis packages nemesis-opts)]
-
-;; in your test, make the nemesis generator refer to the adaptive package:
-:generator
-        (->> (:generator workload)
-                (gen/stagger (/ (:rate opts)))
-                ;; use the adaptive nemesis generator
-                (gen/nemesis (:generator nemesis))
-                (gen/time-limit (:time-limit opts)))
+```
+vagrant ssh
 ```
 
-IMPORTANT:
-- if your nemesis package only uses nemeses in Jepsen's default
-  `jepsen/nemesis/combined.clj`, our distribution rewrites those so they are
-  usable by Mallory;
-- if you package custom nemeses, you must modify them as follows: (1) add a
-  `:ops` field that returns the set of operations (and arguments) supported by
-  the nemesis, and (2) add a `:dispatch` field that takes an operation type
-  returned by `op` and returns an instantiated operation that can be invoked by
-  the nemesis client
+### Setting Up the Mediator
 
-Here is an example nemesis adapted for use with Mallory:
+Before running tests in Mallory, you'll need to set up the mediator. If it's your first time, follow these steps:
 
-```Clojure
-(defn partition-package
-  "A nemesis and generator package for network partitions. Options as for
-  nemesis-package."
-  [opts]
-  (let [needed? ((:faults opts) :partition)
-        db      (:db opts)
-        targets (:targets (:partition opts) (partition-specs db))
-        start (fn start [_ _]
-                {:type  :info
-                 :f     :start-partition
-                 :value (rand-nth targets)})
-        stop  {:type :info, :f :stop-partition, :value nil}
-        gen   (->> (gen/flip-flop start (repeat stop))
-                   (gen/stagger (:interval opts default-interval)))
-        ;; Needed by Mallory -- to inform at start-up which operations this nemesis can perform
-        ops   (cond-> []
-                needed? (concat [{:f :start-partition :values (vec targets)}, {:f :stop-partition, :values [nil]}]))]
-    ;; Needed by Mallory -- to transform an operation type into a specific operation
-    (defn dispatch [op test ctx]
-      (case (:f op)
-        :start-partition  ((fn start [_ _] {:type  :info
-                                            :f     :start-partition
-                                            :value (or (:value op) (rand-nth targets))}) test ctx)
-        :stop-partition  stop
-        nil))
+1. **Install Rustup**:
 
-    {:generator       (when needed? gen)
-     :final-generator (when needed? stop)
-     :nemesis         (partition-nemesis db)
-     :perf            #{{:name  "partition"
-                         :start #{:start-partition}
-                         :stop  #{:stop-partition}
-                         :color "#E9DCA0"}}
-     ;; these two fields are needed by Mallory
-     :ops             ops
-     :dispatch        dispatch}))
+```
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
-An example `nemesis-packages` function (with many custom nemesis packages):
+2. **Install Musl Tools**:
 
-```Clojure
-(defn nemesis-packages
-  "Constructs a nemesis and generators for dqlite."
-  [opts]
-  (let [opts (update opts :faults set)]
-    (->> (concat [(nc/partition-package opts)
-                  (nc/db-package opts)
-                  (member-package opts)
-                  (stop-package opts)
-                  (stable-package opts)]
-                 (:extra-packages opts))
-         (remove nil?))))
+```
+sudo apt-get install musl-tools
 ```
 
-A much simpler one:
+3. **Add Musl Target for Rust**:
 
-```Clojure
-(defn nemesis-packages
-  "Builds a combined package for the given options."
-  [opts]
-  (->> (nc/nemesis-packages opts)
-       (concat [(member-package opts)])
-       (remove nil?)))
+```
+rustup target add x86_64-unknown-linux-musl
 ```
 
+4. **Build the Mediator**:
 
-## Contributions
+```
+cargo build --target=x86_64-unknown-linux-musl
+```
 
-### Contributors
+If the command doesn't execute, make sure to add the `~/.cargo/bin` folder to your `PATH` variable or in your `.bashrc` file.
 
-  * Ruijie Meng
-  * George Pîrlea
-  * Abhik Roychoudhury
-  * Ilya Sergey
+### Running the Application
 
-### Other Contributors
+Jepsen is run using Docker. It has a control plane, a main container that manages five nodes where the applications are deployed. Fortunately, a script will set up the environment for you. Simply execute:
 
-We use [Jepsen](https://jepsen.io/) as the underlying tool. Thanks to Jepsen's developers. We also welcome other contributors to improve and extend Mallory.
+```
+cd /jepsen/docker
+sudo ./bin/up
+```
 
-## License
+This may take over 10 minutes on the first run.
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](./LICENSE) file for details. 
+### Running the Mediator
+
+Once Jepsen is set up, you can run the mediator. This module intercepts messages between nodes and sends them to Mallory. Open a new terminal tab, log into Vagrant again, and run:
+
+```
+cd /jepsen/mediator && target/x86_64-unknown-linux-musl/release/mediator qlearning event_history 0.7
+```
+
+### Running Jepsen Tests
+
+Finally, to run Jepsen tests, access the control plane in another terminal tab and execute:
+
+```
+cd /jepsen/docker
+sudo ./bin/console
+```
+
+Navigate to the test you want to execute and each folder it will tell you how to do it
+
