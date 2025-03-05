@@ -486,11 +486,16 @@ bool AFLCoverage::runOnModule(Module &M)
 
       auto *helperTy_func = FunctionType::get(VoidTy, Int16Ty);
       auto helper_func = M.getOrInsertFunction("track_functions", helperTy_func);
-      IRB.CreateCall(helper_func, {evtValue});
+
+      std::string function_name = F.getName().str();
+
+      Value* function_name_value = IRB.CreateGlobalString(StringRef(function_name),"varName");
+      IRB.CreateCall(helper_func, {evtValue, function_name_value});
 
       /* store event ID info */
       get_debug_loc(&(*InsertPoint), filename, line);
       std::string func_name = F.getName().str();
+
       if (codeLang == 0)
       {
         codeLang = check_code_language(filename);

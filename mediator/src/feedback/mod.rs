@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use std::io::{Cursor, Seek, SeekFrom};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{sync::Arc, time::Instant};
+use std::io::{self, Read};
 
 use antidote::{Mutex, RwLock};
 use byteorder::{BigEndian, ByteOrder, LittleEndian, ReadBytesExt};
@@ -375,20 +376,24 @@ impl FeedbackManager {
                 // FunctionExecute
                 FUNC_EVENT_TYPE => {
                     let function_id = db_rdr.read_u64::<BOrd>().unwrap();
-                    let temporal = db_rdr.read_u64::<BOrd>().unwrap();
+                    let size = db_rdr.read_u64::<BOrd>().unwrap();
+                    let mut buffer = vec![0; size as usize];
+                    let bytes_read = db_rdr.read(&mut buffer).unwrap();
+                    let result_str = String::from_utf8_lossy(&buffer[..bytes_read]);
                     log::info!(
-                        "[FUNC_EVENT_TYPE][Node {} Batch {} Entry {} / {}] FunctionExecute {} @ {} @ Temporal {}",
+                        "[FUNC_EVENT_TYPE][Node {} Batch {} Entry {} / {}] FunctionExecute {} @ {} @ Size {} String {}",
                         node_id,
                         batch_id,
                         db_entry_index,
                         db_evt_counter,
                         function_id,
                         ts,
-                        temporal
+                        size,
+                        result_str
                     );
                     Event::FunctionExecute {
                         function_id: function_id as u16,
-                        temporal: temporal as u64,
+                        temporal: size as u64,
                     }
                 }
 

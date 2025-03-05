@@ -38,7 +38,8 @@ struct Event
       u64 fevtType; // 2: function
       s64 ftimestamp;
       u64 fevtID;
-      u64 temporal;
+      u64 functionSize;
+      char funcionName[128];
     };
     struct
     {
@@ -80,7 +81,7 @@ void track_blocks(u16 evtID)
 /***
  * instrument functions starting point
  ***/
-void track_functions(u16 evtID)
+void track_functions(u16 evtID, char* function_name)
 {
   /* find location to record this event */
   u16 loc = __atomic_add_fetch(&evtVec_ptr[0].evtCounter, 1, __ATOMIC_RELAXED);
@@ -94,7 +95,9 @@ void track_functions(u16 evtID)
   evtVec_ptr[loc].fevtType = FUNC_EVENT_TYPE;
   evtVec_ptr[loc].fevtID = evtID;
   evtVec_ptr[loc].ftimestamp = time;
-  evtVec_ptr[loc].temporal = 42;
+  evtVec_ptr[loc].functionSize = strlen(function_name);
+  strcpy(evtVec_ptr[loc].funcionName, function_name);
+
 }
 
 void init_shm_dsfuzz()
