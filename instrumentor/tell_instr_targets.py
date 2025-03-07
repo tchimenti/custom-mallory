@@ -3,6 +3,7 @@ import os
 import re
 import argparse
 import json
+import re
 
 RES_FILE_NAME = 'instr-targets.json'
 SUMMARY_FILE_NAME = 'targets-summary.txt'
@@ -26,12 +27,16 @@ def tell_specified_blocks(code_path, res_path):
             # store located target lines in a set
             target_bb_set = set()
             target_func_set = set()
+            target_const_dict = dict()
             target_bb_set.clear()
             target_func_set.clear()
+            target_const_dict.clear()
             
             # if having targets pending, search for the next code line 
             is_pending_bb = False 
             is_pending_func = False
+            is_pending_const = False
+            const_value = None
             
             # get code path
             absolute_filename = os.path.join(root, file)
@@ -48,14 +53,15 @@ def tell_specified_blocks(code_path, res_path):
                     while True:
                         content = f.readline()
                         if not content:
-                            if len(target_bb_set) > 0 or len(target_func_set) > 0:
+                            if len(target_bb_set) > 0 or len(target_func_set) > 0 or len(target_const_dict):
                                 total_target_file += 1
                                 total_targets += len(target_bb_set)
                                 total_targets += len(target_func_set)
                                 targets.append({
                                     "path": real_path,
                                     "targets_bb": sorted(list(target_bb_set)),
-                                    "targets_func": sorted(list(target_func_set))
+                                    "targets_func": sorted(list(target_func_set)),
+                                    "targets_const": target_const_dict
                                 })
 
                             break
@@ -63,13 +69,17 @@ def tell_specified_blocks(code_path, res_path):
                             line_num += 1
                             
                             # For INSTRUMENT_BB/INSTRUMENT_FUNC, locate the following code line
-                            if not is_pending_bb and not is_pending_func:
-                                is_bb_label = search_content(r'INSTRUMENT_BB', content)
-                                if is_bb_label:
+                            if not is_pending_bb and not is_pending_func and not is_pending_const:
+                                if search_content(r'INSTRUMENT_BB', content):
                                     is_pending_bb = True
-                                is_func_label = search_content(r'INSTRUMENT_FUNC', content)
-                                if is_func_label:
+                                elif search_content(r'INSTRUMENT_FUNC', content):
                                     is_pending_func = True
+                                elif search_content(r'INSTRUMENT_CONST', content):
+                                    match = re.search(r'INSTRUMENT_CONST:\s*"([^"]+)"', content)
+                                    if match:
+                                        is_pending_const = True
+                                        const_value = match.group(1)
+
                             else:
                                 new_content = content.lstrip()
                                 is_target = search_content(r'^(([a-zA-z]{1}.*)|\})', new_content) # begin with letter or }
@@ -82,6 +92,11 @@ def tell_specified_blocks(code_path, res_path):
                                         is_pending_func = False
                                         target_func_set.add(line_num)
                                         print(f"    locate function targets at line {line_num}")
+                                    if is_pending_const and const_value:
+                                        target_const_dict[line_num] = const_value
+                                        print(f'    locate constant targets at line {line_num} with value {const_value}')
+                                        is_pending_const = False
+                                        const_value = None
 
     res_file = os.path.join(res_path, RES_FILE_NAME)
     with open(res_file, 'a+') as f:
