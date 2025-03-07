@@ -2,8 +2,9 @@
 import os
 import re
 import argparse
+import json
 
-RES_FILE_NAME = 'instr-targets.txt'
+RES_FILE_NAME = 'instr-targets.json'
 SUMMARY_FILE_NAME = 'targets-summary.txt'
 
 # Traverse all code files and locate the targets labeled with:
@@ -19,6 +20,7 @@ def tell_specified_blocks(code_path, res_path):
     total_file = 0
     total_target_file = 0
     total_targets = 0
+    targets = []
     for root, dirs, files in os.walk(code_path):
         for file in files:
             # store located target lines in a set
@@ -50,19 +52,12 @@ def tell_specified_blocks(code_path, res_path):
                                 total_target_file += 1
                                 total_targets += len(target_bb_set)
                                 total_targets += len(target_func_set)
-                                res_file = os.path.join(res_path, RES_FILE_NAME)
-                                with open(res_file, 'a+') as f:
-                                    f.write(real_path)
-                                    f.write("\n")
-                                    for bb in sorted(list(target_bb_set)):
-                                        f.write(str(bb))
-                                        f.write(" ")
-                                    f.write("\n")
-                                    for func in sorted(list(target_func_set)):
-                                        f.write(str(func))
-                                        f.write(" ")
-                                    f.write("\n")
-                                    f.close()
+                                targets.append({
+                                    "path": real_path,
+                                    "targets_bb": sorted(list(target_bb_set)),
+                                    "targets_func": sorted(list(target_func_set))
+                                })
+
                             break
                         else:  
                             line_num += 1
@@ -87,6 +82,10 @@ def tell_specified_blocks(code_path, res_path):
                                         is_pending_func = False
                                         target_func_set.add(line_num)
                                         print(f"    locate function targets at line {line_num}")
+
+    res_file = os.path.join(res_path, RES_FILE_NAME)
+    with open(res_file, 'a+') as f:
+        json.dump(targets, f, indent=4)
     
     print("================ SUMMARY OF ANALYSIS ================")
     print(f"1. scanned {total_file} files")
