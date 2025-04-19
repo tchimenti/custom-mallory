@@ -83,8 +83,42 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 RUN rustup default stable
 # Hack: update crates.io now so it's not updated on every build
 RUN cargo install empty-library || true
-COPY jepsen/instrumentor instrumentor
+
+# coverage server
+WORKDIR /opt
+ENV CXX=clang++
+ENV CC=clang
+RUN mkdir shm
+
+# Hack: update crates.io now so it's not updated on every build
+RUN cargo install empty-library || true
+# Cache dependencies: compile with a dummy main, then replace it with the real one
+COPY jepsen/cov-server/Cargo.toml cov-server/Cargo.toml
+RUN cd / && \
+    cargo new playground\
+    && cd /opt && cp -r /playground/src cov-server/src
+RUN cd cov-server && RUSTFLAGS="-C target-cpu=native" cargo build --release
+RUN cd cov-server && cargo clean -p cov-server && rm -rf src/
+
+# Actually build
+COPY jepsen/cov-server/ cov-server/
+RUN cd cov-server && \
+    # Update the timestamps of all files to force a rebuild
+    find ./src/ -type f -name "*.rs" -exec touch {} + && \
+    RUSTFLAGS="-C target-cpu=native" cargo build --release
+WORKDIR /opt/cov-server
+COPY jepsen/cov-server/Coverage.toml ./target/release/Coverage.toml
+
+EXPOSE 8080
+
+RUN update-alternatives --set iptables /usr/sbin/iptables-legacy
+RUN update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
+
+# end coverage
+
 # This is ugly: we need to copy raw_packet.rs because Docker doesn't follow symlinks outside build context
+WORKDIR /opt
+COPY jepsen/instrumentor instrumentor
 RUN cd instrumentor/llvm_mode; make
 
 # end build tools
@@ -100,26 +134,26 @@ ENV CC=/opt/instrumentor/llvm_mode/afl-clang-fast
 # the compilation related to a given test subject MUST run within the same RUN instruction.
 
 # Baidu Raft
-WORKDIR /opt/fs/
-ENV CXX=/opt/instrumentor/llvm_mode/afl-clang-fast++
-ENV CC=/opt/instrumentor/llvm_mode/afl-clang-fast
-# braft: 1ef36c2(Mar17,2023)
-RUN git clone -b newer-jepsen-testing https://github.com/dranov/braft.git
-WORKDIR /opt/fs/braft
-RUN python3 /opt/instrumentor/tell_instr_targets.py --input ./src --output .
-RUN mkdir bld && cd bld && cmake -DBRPC_WITH_GLOG=ON .. \
-    && export TARGETS_FILE=/opt/fs/braft/instr-targets.txt \
-    && export AFL_USE_ASAN=1 \
-    && make -j$(getconf _NPROCESSORS_ONLN) \
-    # install BRaft & braft_cli
-    && cp -r /opt/fs/braft/bld/output/* / \
-    && cp -r /opt/fs/braft/bld/tools/output/* / \
-    && cd /opt/fs/braft/example/atomic \
-    && cmake . && export TARGETS_FILE=/opt/fs/raft-c/instr-targets.txt \
-    && export AFL_USE_ASAN=1 \
-    && make -j$(getconf _NPROCESSORS_ONLN)
-RUN mv /opt/instrumentor/BB2ID.txt /opt/instrumentor/braft_CodeLocToBBID.txt || true
-COPY jepsen/tests/mallory/braft/resources/jepsen_control.sh /opt/fs/braft/example/atomic/jepsen_control.sh
+# WORKDIR /opt/fs/
+# ENV CXX=/opt/instrumentor/llvm_mode/afl-clang-fast++
+# ENV CC=/opt/instrumentor/llvm_mode/afl-clang-fast
+# # braft: 1ef36c2(Mar17,2023)
+# RUN git clone -b newer-jepsen-testing https://github.com/dranov/braft.git
+# WORKDIR /opt/fs/braft
+# RUN python3 /opt/instrumentor/tell_instr_targets.py --input ./src --output .
+# RUN mkdir bld && cd bld && cmake -DBRPC_WITH_GLOG=ON .. \
+#     && export TARGETS_FILE=/opt/fs/braft/instr-targets.txt \
+#     && export AFL_USE_ASAN=1 \
+#     && make -j$(getconf _NPROCESSORS_ONLN) \
+#     # install BRaft & braft_cli
+#     && cp -r /opt/fs/braft/bld/output/* / \
+#     && cp -r /opt/fs/braft/bld/tools/output/* / \
+#     && cd /opt/fs/braft/example/atomic \
+#     && cmake . && export TARGETS_FILE=/opt/fs/raft-c/instr-targets.txt \
+#     && export AFL_USE_ASAN=1 \
+#     && make -j$(getconf _NPROCESSORS_ONLN)
+# RUN mv /opt/instrumentor/BB2ID.txt /opt/instrumentor/braft_CodeLocToBBID.txt || true
+# COPY jepsen/tests/mallory/braft/resources/jepsen_control.sh /opt/fs/braft/example/atomic/jepsen_control.sh
 
 # Dqlite (based on Canonical Raft, which we build again from upstream)
 WORKDIR /opt/fs
@@ -184,37 +218,37 @@ RUN export CGO_LDFLAGS_ALLOW="-Wl,-z,now" \
     && go build -o app -asan app.go
 
 # RedisRaft
-WORKDIR /opt
-ENV CXX=clang++
-ENV CC=clang
-RUN mkdir /opt/redis
-WORKDIR /opt/fs
-# redis: 7.0.10; redisraft: 7b460794(Arp4,2023)
-RUN git clone -b jepsen-unstable https://github.com/mengrj/redis.git
-RUN git clone -b newer-jepsen-testing https://github.com/mengrj/redisraft.git
-WORKDIR /opt/fs
-RUN cd redis && python3 /opt/instrumentor/tell_instr_targets.py --input ./src --output .
+# WORKDIR /opt
+# ENV CXX=clang++
+# ENV CC=clang
+# RUN mkdir /opt/redis
+# WORKDIR /opt/fs
+# # redis: 7.0.10; redisraft: 7b460794(Arp4,2023)
+# RUN git clone -b jepsen-unstable https://github.com/mengrj/redis.git
+# RUN git clone -b newer-jepsen-testing https://github.com/mengrj/redisraft.git
+# WORKDIR /opt/fs
+# RUN cd redis && python3 /opt/instrumentor/tell_instr_targets.py --input ./src --output .
 
-WORKDIR /opt/fs
-RUN cd redisraft && python3 /opt/instrumentor/tell_instr_targets.py --input ./src --output .
+# WORKDIR /opt/fs
+# RUN cd redisraft && python3 /opt/instrumentor/tell_instr_targets.py --input ./src --output .
 
-ENV CXX=/opt/instrumentor/llvm_mode/afl-clang-fast++
-ENV CC=/opt/instrumentor/llvm_mode/afl-clang-fast
+# ENV CXX=/opt/instrumentor/llvm_mode/afl-clang-fast++
+# ENV CC=/opt/instrumentor/llvm_mode/afl-clang-fast
 
-WORKDIR /opt/fs
-RUN cd redis && make distclean \
-    && export TARGETS_FILE=/opt/fs/redis/instr-targets.txt \
-    && make -j$(getconf _NPROCESSORS_ONLN) SANITIZER=address \
-    && cd ../redisraft && mkdir build && cd build \
-    && export TARGETS_FILE=/opt/fs/redisraft/instr-targets.txt \
-    && cmake .. -DSANITIZER=address \
-    && make -j$(getconf _NPROCESSORS_ONLN)
-RUN mv /opt/instrumentor/BB2ID.txt /opt/instrumentor/redisraft_CodeLocToBBID.txt || true
-RUN cp /opt/fs/redis/src/redis-server /opt/redis/
-RUN chmod +x /opt/redis/redis-server
-RUN cp /opt/fs/redis/src/redis-cli /opt/redis/
-RUN chmod +x /opt/redis/redis-cli
-RUN cp /opt/fs/redisraft/redisraft.so /opt/redis
+# WORKDIR /opt/fs
+# RUN cd redis && make distclean \
+#     && export TARGETS_FILE=/opt/fs/redis/instr-targets.txt \
+#     && make -j$(getconf _NPROCESSORS_ONLN) SANITIZER=address \
+#     && cd ../redisraft && mkdir build && cd build \
+#     && export TARGETS_FILE=/opt/fs/redisraft/instr-targets.txt \
+#     && cmake .. -DSANITIZER=address \
+#     && make -j$(getconf _NPROCESSORS_ONLN)
+# RUN mv /opt/instrumentor/BB2ID.txt /opt/instrumentor/redisraft_CodeLocToBBID.txt || true
+# RUN cp /opt/fs/redis/src/redis-server /opt/redis/
+# RUN chmod +x /opt/redis/redis-server
+# RUN cp /opt/fs/redis/src/redis-cli /opt/redis/
+# RUN chmod +x /opt/redis/redis-cli
+# RUN cp /opt/fs/redisraft/redisraft.so /opt/redis
 # end RedisRaft
 
 # # MongoDB
@@ -271,37 +305,5 @@ RUN cp /opt/fs/redisraft/redisraft.so /opt/redis
 # RUN cp /opt/fs/tidb/tikv-*.txt /opt/instrumentor/
 
 # end systems
-
-# coverage server
-WORKDIR /opt
-ENV CXX=clang++
-ENV CC=clang
-RUN mkdir shm
-
-# Hack: update crates.io now so it's not updated on every build
-RUN cargo install empty-library || true
-# Cache dependencies: compile with a dummy main, then replace it with the real one
-COPY jepsen/cov-server/Cargo.toml cov-server/Cargo.toml
-RUN cd / && \
-    cargo new playground\
-    && cd /opt && cp -r /playground/src cov-server/src
-RUN cd cov-server && RUSTFLAGS="-C target-cpu=native" cargo build --release
-RUN cd cov-server && cargo clean -p cov-server && rm -rf src/
-
-# Actually build
-COPY jepsen/cov-server/ cov-server/
-RUN cd cov-server && \
-    # Update the timestamps of all files to force a rebuild
-    find ./src/ -type f -name "*.rs" -exec touch {} + && \
-    RUSTFLAGS="-C target-cpu=native" cargo build --release
-WORKDIR /opt/cov-server
-COPY jepsen/cov-server/Coverage.toml ./target/release/Coverage.toml
-
-EXPOSE 8080
-
-RUN update-alternatives --set iptables /usr/sbin/iptables-legacy
-RUN update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
-
-# end coverage
 
 CMD ["/usr/local/bin/boot-debian-base"]

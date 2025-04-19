@@ -491,7 +491,7 @@ bool AFLCoverage::runOnModule(Module &M)
 
       Value* function_name_value = IRB.CreateGlobalString(StringRef(function_name),"varName");
       IRB.CreateCall(helper_func, {evtValue, function_name_value});
-
+      //IRB.CreateCall(helper_func, {evtValue});
       /* store event ID info */
       get_debug_loc(&(*InsertPoint), filename, line);
       std::string func_name = F.getName().str();

@@ -376,24 +376,24 @@ impl FeedbackManager {
                 // FunctionExecute
                 FUNC_EVENT_TYPE => {
                     let function_id = db_rdr.read_u64::<BOrd>().unwrap();
-                    let size = db_rdr.read_u64::<BOrd>().unwrap();
-                    let mut buffer = vec![0; size as usize];
-                    let bytes_read = db_rdr.read(&mut buffer).unwrap();
-                    let result_str = String::from_utf8_lossy(&buffer[..bytes_read]);
+                    
+                    let mut buffer = vec![0; 64];
+                    db_rdr.read_exact(&mut buffer).unwrap();
+                    let str_end = buffer.iter().position(|&b| b == 0).unwrap_or(64);
+                    let result_str = String::from_utf8_lossy(&buffer[..str_end]);
+
                     log::info!(
-                        "[FUNC_EVENT_TYPE][Node {} Batch {} Entry {} / {}] FunctionExecute {} @ {} @ Size {} String {}",
+                        "[FUNC_EVENT_TYPE][Node {} Batch {} Entry {} / {}] FunctionExecute {} @ {} @ FunctionName {}",
                         node_id,
                         batch_id,
                         db_entry_index,
                         db_evt_counter,
                         function_id,
                         ts,
-                        size,
                         result_str
                     );
                     Event::FunctionExecute {
-                        function_id: function_id as u16,
-                        temporal: size as u64,
+                        function_id: function_id as u16
                     }
                 }
 

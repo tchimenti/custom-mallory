@@ -38,8 +38,7 @@ struct Event
       u64 fevtType; // 2: function
       s64 ftimestamp;
       u64 fevtID;
-      u64 functionSize;
-      char funcionName[128];
+      char funcionName[64];
     };
     struct
     {
@@ -74,14 +73,14 @@ void track_blocks(u16 evtID)
 
   /* record this event */
   evtVec_ptr[loc].bevtType = BLOCK_EVENT_TYPE;
-  evtVec_ptr[loc].bevtID = evtID;
   evtVec_ptr[loc].btimestamp = time;
+  evtVec_ptr[loc].bevtID = evtID;
 }
 
 /***
  * instrument functions starting point
  ***/
-void track_functions(u16 evtID, char* function_name)
+void track_functions(u16 evtID, char* functionName)
 {
   /* find location to record this event */
   u16 loc = __atomic_add_fetch(&evtVec_ptr[0].evtCounter, 1, __ATOMIC_RELAXED);
@@ -93,11 +92,9 @@ void track_functions(u16 evtID, char* function_name)
 
   /* record this event */
   evtVec_ptr[loc].fevtType = FUNC_EVENT_TYPE;
-  evtVec_ptr[loc].fevtID = evtID;
   evtVec_ptr[loc].ftimestamp = time;
-  evtVec_ptr[loc].functionSize = strlen(function_name);
-  strcpy(evtVec_ptr[loc].funcionName, function_name);
-
+  evtVec_ptr[loc].fevtID = evtID;
+  strcpy(evtVec_ptr[loc].funcionName, functionName);
 }
 
 void init_shm_dsfuzz()
