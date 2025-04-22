@@ -78,12 +78,13 @@ namespace
 
     // Types
     Type *VoidTy;
+    Type *StringTy;
     PointerType *Int8PtrTy;
     IntegerType *Int8Ty;
     IntegerType *Int16Ty;
     IntegerType *Int32Ty;
     IntegerType *Int64Ty;
-    PointerType *Int64PtrTy;
+    PointerType *Int64PtrTy
 
     // Store mapping data from basicblock location to ID
     std::ofstream bbToID;
@@ -483,14 +484,29 @@ bool AFLCoverage::runOnModule(Module &M)
       u16 *evtIDPtr = get_ID_ptr();
       u16 evtID = *evtIDPtr;
       Value *evtValue = ConstantInt::get(Int16Ty, evtID);
-
-      auto *helperTy_func = FunctionType::get(VoidTy, Int16Ty);
+      StructType *raftStructPtrTy = StructType::create(C, "raft");
+      vector<Type*> args = {
+        Int16Ty,           
+        Int8PtrTy,
+        raftStructPtrTy,
+      };
+      auto *helperTy_func = FunctionType::get(VoidTy, args, false);
+      
       auto helper_func = M.getOrInsertFunction("track_functions", helperTy_func);
 
       std::string function_name = F.getName().str();
 
+      Value *structArg;
+      for (Argument &arg : F->args()) {
+          StringRef name = arg.getName();
+          //This hardcoded value is only for testing.
+          if (name == "r") {
+              structArg = &arg;
+          }
+      }
+      
       Value* function_name_value = IRB.CreateGlobalString(StringRef(function_name),"varName");
-      IRB.CreateCall(helper_func, {evtValue, function_name_value});
+      IRB.CreateCall(helper_func, {evtValue, function_name_value, structArg});
       //IRB.CreateCall(helper_func, {evtValue});
       /* store event ID info */
       get_debug_loc(&(*InsertPoint), filename, line);
