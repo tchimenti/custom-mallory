@@ -84,7 +84,7 @@ namespace
     IntegerType *Int16Ty;
     IntegerType *Int32Ty;
     IntegerType *Int64Ty;
-    PointerType *Int64PtrTy
+    PointerType *Int64PtrTy;
 
     // Store mapping data from basicblock location to ID
     std::ofstream bbToID;
@@ -484,26 +484,37 @@ bool AFLCoverage::runOnModule(Module &M)
       u16 *evtIDPtr = get_ID_ptr();
       u16 evtID = *evtIDPtr;
       Value *evtValue = ConstantInt::get(Int16Ty, evtID);
-      StructType *raftStructPtrTy = StructType::create(C, "raft");
-      vector<Type*> args = {
+
+      Value *structArg;
+      Type* structType;
+      for (Argument &arg : F.args()) {
+          if (arg.getType()->isPointerTy()) {
+            Type *elemTy = arg.getType()->getPointerElementType();
+            if (elemTy->isStructTy()) {
+                structType = arg.getType();
+                structArg = &arg;
+            }
+          }
+      }
+
+
+      if (!structType || !structArg) {
+        auto raftStructTy = M.getTypeByName("raft");
+        structType = PointerType::get(raftStructTy, 0);  // Puntero nulo a char si no hay struct
+        structArg = ConstantPointerNull::get(cast<PointerType>(structType));  // puntero nulo constante
+      }
+
+
+      std::vector<Type*> args = {
         Int16Ty,           
         Int8PtrTy,
-        raftStructPtrTy,
+        structType,
       };
       auto *helperTy_func = FunctionType::get(VoidTy, args, false);
       
       auto helper_func = M.getOrInsertFunction("track_functions", helperTy_func);
 
       std::string function_name = F.getName().str();
-
-      Value *structArg;
-      for (Argument &arg : F->args()) {
-          StringRef name = arg.getName();
-          //This hardcoded value is only for testing.
-          if (name == "r") {
-              structArg = &arg;
-          }
-      }
       
       Value* function_name_value = IRB.CreateGlobalString(StringRef(function_name),"varName");
       IRB.CreateCall(helper_func, {evtValue, function_name_value, structArg});

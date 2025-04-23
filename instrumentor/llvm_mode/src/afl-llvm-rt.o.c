@@ -38,6 +38,7 @@ struct Event
       u64 fevtType; // 2: function
       s64 ftimestamp;
       u64 fevtID;
+      u16 state;
       char funcionName[64];
     };
     struct
@@ -77,10 +78,11 @@ void track_blocks(u16 evtID)
   evtVec_ptr[loc].bevtID = evtID;
 }
 
+
 /***
  * instrument functions starting point
  ***/
-void track_functions(u16 evtID, char* functionName)
+void track_functions(u16 evtID, char* functionName, struct raft* r)
 {
   /* find location to record this event */
   u16 loc = __atomic_add_fetch(&evtVec_ptr[0].evtCounter, 1, __ATOMIC_RELAXED);
@@ -94,6 +96,11 @@ void track_functions(u16 evtID, char* functionName)
   evtVec_ptr[loc].fevtType = FUNC_EVENT_TYPE;
   evtVec_ptr[loc].ftimestamp = time;
   evtVec_ptr[loc].fevtID = evtID;
+  evtVec_ptr[loc].state = 10;
+  if(r != NULL){
+    evtVec_ptr[loc].state = r->state;    
+  }
+  
   strcpy(evtVec_ptr[loc].funcionName, functionName);
 }
 
