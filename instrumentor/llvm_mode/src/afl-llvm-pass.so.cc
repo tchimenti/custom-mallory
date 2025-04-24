@@ -492,6 +492,7 @@ bool AFLCoverage::runOnModule(Module &M)
           if (arg.getType()->isPointerTy()) {
             Type *elemTy = arg.getType()->getPointerElementType();
             if (elemTy->isStructTy()) {
+              if(elemTy->getName() == "struct.Raft")
                 structType = arg.getType();
                 structArg = &arg;
             }
