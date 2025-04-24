@@ -487,12 +487,22 @@ bool AFLCoverage::runOnModule(Module &M)
 
       Value *structArg;
       Type* structType;
+
+      //INTRUCMENT FUNC
+      
+      sendAPPendEntries(Struct Raft* r, int hola){
+        track_function(16, 'sendAPPendEntries', r);
+      }
+
       for (Argument &arg : F.args()) {
           if (arg.getType()->isPointerTy()) {
             Type *elemTy = arg.getType()->getPointerElementType();
             if (elemTy->isStructTy()) {
-                structType = arg.getType();
-                structArg = &arg;
+              StructType *structTy = dyn_cast<StructType>(elemTy);
+              if (structTy && structTy->hasName() && structTy->getName() == "raft") {
+                  structType = arg.getType();
+                  structArg = &arg;
+              }
             }
           }
       }
