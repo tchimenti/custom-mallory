@@ -487,16 +487,13 @@ bool AFLCoverage::runOnModule(Module &M)
 
       Value *structArg;
       Type* structType;
-      
+
       for (Argument &arg : F.args()) {
           if (arg.getType()->isPointerTy()) {
             Type *elemTy = arg.getType()->getPointerElementType();
             if (elemTy->isStructTy()) {
-              StructType *structTy = dyn_cast<StructType>(elemTy);
-              if (structTy && structTy->hasName() && structTy->getName() == "struct.raft") {
-                  structType = arg.getType();
-                  structArg = &arg;
-              }
+                structType = arg.getType();
+                structArg = &arg;
             }
           }
       }
