@@ -376,7 +376,7 @@ impl FeedbackManager {
                 // FunctionExecute
                 FUNC_EVENT_TYPE => {
                     let function_id = db_rdr.read_u64::<BOrd>().unwrap();
-                    let state = db_rdr.read_u16::<BOrd>().unwrap();
+                    let state = db_rdr.read_u64::<BOrd>().unwrap();
                     // enum { RAFT_UNAVAILABLE, RAFT_FOLLOWER, RAFT_CANDIDATE, RAFT_LEADER };
                     let mut buffer = vec![0; 64];
                     db_rdr.read_exact(&mut buffer).unwrap();
@@ -384,7 +384,7 @@ impl FeedbackManager {
                     let result_str = String::from_utf8_lossy(&buffer[..str_end]);
 
                     log::info!(
-                        "[FUNC_EVENT_TYPE][Node {} Batch {} Entry {} / {}] FunctionExecute {} @ {} @ FunctionName {} @ State {}",
+                        "[FUNC_EVENT_TYPE][Node {} Batch {} Entry {} / {}] FunctionExecute {} @ {} @ Name {} @ State {}",
                         node_id,
                         batch_id,
                         db_entry_index,

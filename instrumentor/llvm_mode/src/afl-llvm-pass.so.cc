@@ -103,6 +103,7 @@ namespace
 
 }
 
+
 /***
  * Load identified interesting basicblocks(targets) to instrument
  ***/
@@ -485,43 +486,59 @@ bool AFLCoverage::runOnModule(Module &M)
       u16 evtID = *evtIDPtr;
       Value *evtValue = ConstantInt::get(Int16Ty, evtID);
 
-      Value *structArg;
-      Type* structType;
+      Value *structArg = NULL;
+      Type* structType = NULL;
 
       for (Argument &arg : F.args()) {
           if (arg.getType()->isPointerTy()) {
             Type *elemTy = arg.getType()->getPointerElementType();
-            if (elemTy->isStructTy()) {
-              StructType *structTy = dyn_cast<StructType>(elemTy)
-              if(structTy->getName() == "struct.Raft")
-                structType = arg.getType();
-                structArg = &arg;
+            if (auto *structTy = llvm::dyn_cast<llvm::StructType>(elemTy)) {
+              if (structTy->hasName()) {
+                llvm::StringRef name = structTy->getName();
+                if (name.endswith("raft") || name.contains("Raft")) {
+                    // Matchea algo como 'struct.Raft' o 'class.raft'
+                    structType = arg.getType();
+                    structArg = &arg;    
+                }
+              }
             }
           }
       }
-
-
-      if (!structType || !structArg) {
-        auto raftStructTy = M.getTypeByName("raft");
-        structType = PointerType::get(raftStructTy, 0);  // Puntero nulo a char si no hay struct
-        structArg = ConstantPointerNull::get(cast<PointerType>(structType));  // puntero nulo constante
-      }
-
 
       std::vector<Type*> args = {
         Int16Ty,           
         Int8PtrTy,
         structType,
       };
-      auto *helperTy_func = FunctionType::get(VoidTy, args, false);
-      
-      auto helper_func = M.getOrInsertFunction("track_functions", helperTy_func);
 
-      std::string function_name = F.getName().str();
+
+      // This is ugly, only as a workaround, we have to change it
+      if (!structType || !structArg) {
+          args = {
+            Int16Ty,           
+            Int8PtrTy,
+          };
+
+          auto *helperTy_func = FunctionType::get(VoidTy, args, false);
       
-      Value* function_name_value = IRB.CreateGlobalString(StringRef(function_name),"varName");
-      IRB.CreateCall(helper_func, {evtValue, function_name_value, structArg});
-      //IRB.CreateCall(helper_func, {evtValue});
+          auto helper_func = M.getOrInsertFunction("track_functions2", helperTy_func);
+
+          std::string function_name = F.getName().str();
+          
+          Value* function_name_value = IRB.CreateGlobalString(StringRef(function_name),"varName");
+          IRB.CreateCall(helper_func, {evtValue, function_name_value});
+
+      } else {
+          auto *helperTy_func = FunctionType::get(VoidTy, args, false);
+      
+          auto helper_func = M.getOrInsertFunction("track_functions", helperTy_func);
+
+          std::string function_name = F.getName().str();
+          
+          Value* function_name_value = IRB.CreateGlobalString(StringRef(function_name),"varName");
+          IRB.CreateCall(helper_func, {evtValue, function_name_value, structArg});
+      }
+
       /* store event ID info */
       get_debug_loc(&(*InsertPoint), filename, line);
       std::string func_name = F.getName().str();
@@ -560,6 +577,8 @@ bool AFLCoverage::runOnModule(Module &M)
 
   return true;
 }
+
+
 
 static void registerAFLPass(const PassManagerBuilder &,
                             legacy::PassManagerBase &PM)

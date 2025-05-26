@@ -38,7 +38,7 @@ struct Event
       u64 fevtType; // 2: function
       s64 ftimestamp;
       u64 fevtID;
-      u16 state;
+      u64 state;
       char funcionName[64];
     };
     struct
@@ -96,13 +96,32 @@ void track_functions(u16 evtID, char* functionName, struct raft* r)
   evtVec_ptr[loc].fevtType = FUNC_EVENT_TYPE;
   evtVec_ptr[loc].ftimestamp = time;
   evtVec_ptr[loc].fevtID = evtID;
-  evtVec_ptr[loc].state = 10;
+  evtVec_ptr[loc].state = 100;
   if(r != NULL){
     evtVec_ptr[loc].state = r->state;    
   }
-  
   strcpy(evtVec_ptr[loc].funcionName, functionName);
 }
+
+void track_functions2(u16 evtID, char* functionName)
+{
+  /* find location to record this event */
+  u16 loc = __atomic_add_fetch(&evtVec_ptr[0].evtCounter, 1, __ATOMIC_RELAXED);
+
+  /* collect tid and timestamp */
+  struct timespec st;
+  clock_gettime(CLOCK_MONOTONIC, &st);
+  s64 time = st.tv_sec * 1000000000 + st.tv_nsec;
+
+  /* record this event */
+  evtVec_ptr[loc].fevtType = FUNC_EVENT_TYPE;
+  evtVec_ptr[loc].ftimestamp = time;
+  evtVec_ptr[loc].fevtID = evtID;
+  evtVec_ptr[loc].state = 100;
+
+  strcpy(evtVec_ptr[loc].funcionName, functionName);
+}
+
 
 void init_shm_dsfuzz()
 {
