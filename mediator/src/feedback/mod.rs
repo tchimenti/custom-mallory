@@ -26,6 +26,8 @@ use crate::history::{
     timeline::DynamicTimeline,
 };
 use crate::nemesis::schedules::END_SCHEDULE_STEP_ID;
+use std::convert::TryFrom;
+use std::fmt;
 
 const JEPSEN_NODE_NAME: &str = "jepsen";
 pub const JEPSEN_NODE_ID: NodeId = 0;
@@ -36,7 +38,45 @@ const FUNC_EVENT_TYPE: u64 = 2;
 const PACKET_SEND_EVENT_TYPE: u64 = 3;
 const PACKET_RECV_EVENT_TYPE: u64 = 4;
 
-const LOCAL_EVENT_SIZE: u16 = 24;
+const LOCAL_EVENT_SIZE: u16 = 96;
+
+#[repr(u64)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RaftState {
+    Unavailable = 0,
+    Follower = 1,
+    Candidate = 2,
+    Leader = 3,
+    Unknown = 100
+}
+
+impl TryFrom<u64> for RaftState {
+    type Error = ();
+
+    fn try_from(value: u64) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(RaftState::Unavailable),
+            1 => Ok(RaftState::Follower),
+            2 => Ok(RaftState::Candidate),
+            3 => Ok(RaftState::Leader),
+            100 => Ok(RaftState::Unknown),
+            _ => Err(()),
+        }
+    }
+}
+
+impl fmt::Display for RaftState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let texto = match self {
+            RaftState::Unavailable => "Unavailable",
+            RaftState::Follower    => "Follower",
+            RaftState::Candidate   => "Candidate",
+            RaftState::Leader      => "Leader",
+            RaftState::Unknown      => "Unknown",
+        };
+        write!(f, "{}", texto)
+    }
+}
 
 /// Manages receiving feedback from the nodes' coverage servers.
 pub struct FeedbackManager {
@@ -377,14 +417,14 @@ impl FeedbackManager {
                 FUNC_EVENT_TYPE => {
                     let function_id = db_rdr.read_u64::<BOrd>().unwrap();
                     let state = db_rdr.read_u64::<BOrd>().unwrap();
-                    // enum { RAFT_UNAVAILABLE, RAFT_FOLLOWER, RAFT_CANDIDATE, RAFT_LEADER };
+                    let state_str = RaftState::try_from(state).unwrap_or(RaftState::Unavailable);
                     let mut buffer = vec![0; 64];
                     db_rdr.read_exact(&mut buffer).unwrap();
                     let str_end = buffer.iter().position(|&b| b == 0).unwrap_or(64);
                     let result_str = String::from_utf8_lossy(&buffer[..str_end]);
 
                     log::info!(
-                        "[FUNC_EVENT_TYPE][Node {} Batch {} Entry {} / {}] FunctionExecute {} @ {} @ Name {} @ State {}",
+                        "[FUNC_EVENT_TYPE][Node {} Batch {} Entry {} / {}] FunctionExecute {} @ {} @ FunctionName {} @ State {}",
                         node_id,
                         batch_id,
                         db_entry_index,
@@ -392,7 +432,7 @@ impl FeedbackManager {
                         function_id,
                         ts,
                         result_str,
-                        state
+                        state_str
                     );
                     Event::FunctionExecute {
                         function_id: function_id as u16
